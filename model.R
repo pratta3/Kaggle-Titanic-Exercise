@@ -115,19 +115,11 @@ plot + geom_bar(aes(fill = Survived), position = "dodge") +
 full[1:891,] %>% group_by(Sex, Pclass) %>% summarize(prop = mean(Survived == 1))
 
 
-# Experimenting with plotting the survival rate of different age groups
-age.factor <- full %>% filter(!is.na(Age)) %>% pull(Age)
-cutpoints <- quantile(age.factor, probs = seq(0, 1, .05))
-age.factor <- age.factor %>% cut(breaks = cutpoints, labels = cutpoints[1:length(cutpoints)-1])
 
-age.survival <- full %>% filter(!is.na(Age)) %>% pull(Survived) %>% as.character %>% as.numeric
 
-age.data <- data.frame(age.survival, age.factor) %>% 
-        group_by(age.factor) %>% 
-        summarize(survival.rate = mean(age.survival, na.rm = TRUE))
 
-ggplot(age.data, aes(age.factor, survival.rate)) + geom_bar(stat = "identity")
-
+### Age variable ###
+#===================
 
 
 
@@ -204,6 +196,37 @@ age.survival <- age.explore()
 ggplot(age.survival, aes(max.age, survival.rate)) +
         geom_line(aes(color = sex)) +
         facet_grid(. ~ pclass)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
