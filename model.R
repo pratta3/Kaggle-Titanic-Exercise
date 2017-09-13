@@ -200,35 +200,89 @@ ggplot(age.survival, aes(max.age, survival.rate)) +
 
 
 
+# Let's take a look at the missing values
+
+# It doesn't look like there are any big differences between survival rates
+# in passengers who have and Age recorded vs. passengers who have missing Age
+ggplot(full, aes(Survived)) + geom_bar(aes(fill = Survived)) + facet_grid(. ~ age.na)
+full %>% group_by(age.na) %>% 
+        summarize(survival.rate = mean(as.numeric(as.character(Survived)), na.rm = TRUE),
+                  prop.na = mean(is.na(Survived)))
+
+
+
+
+# SO: what should I do with the missing Age values?
+
+# Different ways of looking at the distribution of Age grouped by Sex and Pclass
+ggplot(full, aes(Sex, Age)) + geom_violin(aes(fill = Sex)) + facet_grid(. ~ Pclass)
+ggplot(full, aes(Age)) + geom_density(aes(fill = Sex), alpha = .5) + facet_grid(Pclass ~ .)
+ggplot(full, aes(Age)) + geom_histogram(aes(fill = Sex), position = "identity", alpha = .5) + facet_grid(Pclass ~ .)
+
+
+# Look at some summary statistics
+full %>% filter(!is.na(Age)) %>% 
+        group_by(Sex, Pclass) %>% 
+        summarize(median.age = median(Age),
+                  mean.age = mean(Age),
+                  sd.age = sd(Age),
+                  min.age = min(Age),
+                  max.age = max(Age),
+                  n = n())
+
+age.means <- full %>% filter(!is.na(Age)) %>% 
+        group_by(Sex, Pclass) %>% 
+        summarize(mean.age = mean(Age))
+
+# I'm going to impute the mean value of each Sex/Pclass into the missing Age values
+# in the full dataset.
+full <- full %>% left_join(age.means, by = c("Sex", "Pclass")) %>% 
+        mutate(Age = ifelse(is.na(Age), mean.age, Age)) %>% 
+        select(-mean.age)
+        
+# Check that you did what you meant to do
+sum(is.na(full$Age))
+#[1] 0
+
+ggplot(full, aes(Age)) + geom_density(aes(fill = Sex), alpha = .5) + facet_grid(Pclass ~ .)
+
+# Good, it looks like it worked properly.
+
+
+
+# Take another look at the Age survival rate plots
+age.survival <- age.explore()
+
+ggplot(age.survival, aes(max.age, survival.rate)) +
+        geom_line(aes(color = sex)) +
+        facet_grid(. ~ pclass)
 
 
 
 
 
+# How many passengers were under 15 years old?
+full %>% filter(Age <= 15) %>% 
+        group_by(Sex, Pclass) %>% 
+        summarize(n = n())
+
+# Proportions compared to the full dataset
+full %>% filter(Age <= 15) %>% 
+        group_by(Sex) %>% 
+        summarize(one = sum(Pclass == 1)/n(),
+                  two = sum(Pclass == 2)/n(),
+                  three = sum(Pclass == 3)/n())
+
+full %>% group_by(Sex) %>% 
+        summarize(one = sum(Pclass == 1)/n(),
+                  two = sum(Pclass == 2)/n(),
+                  three = sum(Pclass == 3)/n())
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+# "Master" looks like a title for young boys. I'll go back and change
+# the age of passengers with "Master" in their names.
+full %>% filter(Age <= 15 & Sex == "male") %>% select(Name, Age)
+full %>% filter(str_detect(Name, "Master\\.")) %>% select(Name, Age)
 
 
 
