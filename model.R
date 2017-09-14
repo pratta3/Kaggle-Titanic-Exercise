@@ -118,171 +118,137 @@ full[1:891,] %>% group_by(Sex, Pclass) %>% summarize(prop = mean(Survived == 1))
 
 
 
+### Title variable ###
+#=====================
+
+# Add variable that contains the title associated with each Name
+full <- full %>% mutate(Title = str_extract(Name, "[A-Za-z]+\\."))
+
+# Simplify the Titles
+full <- full %>% mutate(Title = ifelse(Sex == "male" & !(Title %in% c("Mr.", "Master.")),
+                                       "Mr.", Title),
+                        Title = ifelse(Sex == "female" & !(Title %in% c("Miss.", "Mrs.")),
+                                       "Mrs.", Title))
+
+
+
+
+
+
 ### Age variable ###
 #===================
 
 
 
-# There doesn't seem to be much going on except that young children have higher survival rates.
-cutpoints <- function(vector, ncuts){
-        quantile(vector, probs = seq(0, 1, 1/n))
-}
-n = 4
-age.explore <- full %>% 
-        filter(!is.na(Age)) %>% 
-        mutate(Age = cut(Age, breaks = cutpoints(Age, n), labels = cutpoints(Age, n)[1:n]),
-               Survived = as.numeric(as.character(Survived))) %>% 
-        group_by(Sex, Pclass, Age) %>% 
-        summarize(survival.rate = mean(Survived, na.rm = TRUE),
-                  n = n())
+# Age stats of boys with the title "Master".
+master.stats <- full %>% filter(str_detect(Name, "Master\\.")) %>% 
+        summarize(n = n(),
+                  median = median(Age, na.rm = T),
+                  mean = mean(Age, na.rm = T),
+                  sd = sd(Age, na.rm = T),
+                  min = min(Age, na.rm = T),
+                  max = max(Age, na.rm = T))
 
-ggplot(age.explore, aes(Age, survival.rate)) + 
-        geom_bar(stat = "identity") +
-        facet_grid(Pclass ~ Sex)
+# There are only 5 boys age 15 or younger that aren't listed as "Master".
+full %>% filter(Sex == "male" & Age <= 15 & !str_detect(Name, "Master\\."))
+
+full %>% filter(Title == "Master." & is.na(Age))
 
 
+# Impute the mean values of the different Titles/Pclass into missing Age values
+age.means <- full %>% group_by(Title, Pclass) %>% summarize(mean.age = mean(Age, na.rm = T))
 
-# Function calculates the survival rate of males and females separately of
-# Age less than or equal to each integer in the range of 1 to the max Age
-age.explore <- function(){
-        seq <- 1:max(full$Age, na.rm = TRUE)
-        prop <- matrix(rep(NA, length(seq)*2), ncol = 2)
-        data <- full %>% mutate(Survived = as.numeric(as.character(Survived))) %>% 
-                group_by(Sex)
-        for(i in seq){
-                prop[i,] <- data %>% filter(Age <= i) %>% 
-                        summarize(survival.rate = mean(Survived, na.rm = TRUE)) %>% 
-                        pull(survival.rate)
-        }
-        data.frame(sex = rep(c("female", "male"), each = length(seq)),
-                   survival.rate = c(prop[,1], prop[,2]),
-                   max.age = rep(seq, 2))
-}
-
-age.survival <- age.explore()
-
-ggplot(age.survival, aes(max.age, survival.rate)) + geom_point(aes(color = sex)) +
-        geom_smooth(aes(color = sex), se = FALSE)
-
-
-
-
-
-# Function calculates survival rates of males and females in each
-# Pclass with Age less than or equal to each integer from 2 to
-# the max Age.
-age.explore <- function(){
-        seq <- 2:max(full$Age, na.rm = TRUE)
-        prop <- matrix(rep(NA, length(seq)*6), ncol = 6)
-        data <- full %>% mutate(Survived = as.numeric(as.character(Survived))) %>% 
-                group_by(Sex, Pclass)
-        sex <- data %>% summarize(survival.rate = mean(Survived, na.rm = TRUE)) %>% 
-                pull(Sex)
-        class <- data %>% summarize(Survival.rate = mean(Survived, na.rm = TRUE)) %>% 
-                pull(Pclass)
-        for(i in seq){
-                prop[i-1,] <- data %>% filter(Age <= i) %>% 
-                        summarize(survival.rate = mean(Survived, na.rm = TRUE)) %>% 
-                        pull(survival.rate)
-        }
-        data.frame(sex = rep(sex, each = length(seq)),
-                   pclass = rep(class, each = length(seq)),
-                   survival.rate = c(prop[,1], prop[,2], prop[,3], prop[,4], prop[,5], prop[,6]),
-                   max.age = rep(seq, 6))
-}
-
-age.survival <- age.explore()
-
-ggplot(age.survival, aes(max.age, survival.rate)) +
-        geom_line(aes(color = sex)) +
-        facet_grid(. ~ pclass)
-
-
-
-
-# Let's take a look at the missing values
-
-# It doesn't look like there are any big differences between survival rates
-# in passengers who have and Age recorded vs. passengers who have missing Age
-ggplot(full, aes(Survived)) + geom_bar(aes(fill = Survived)) + facet_grid(. ~ age.na)
-full %>% group_by(age.na) %>% 
-        summarize(survival.rate = mean(as.numeric(as.character(Survived)), na.rm = TRUE),
-                  prop.na = mean(is.na(Survived)))
-
-
-
-
-# SO: what should I do with the missing Age values?
-
-# Different ways of looking at the distribution of Age grouped by Sex and Pclass
-ggplot(full, aes(Sex, Age)) + geom_violin(aes(fill = Sex)) + facet_grid(. ~ Pclass)
-ggplot(full, aes(Age)) + geom_density(aes(fill = Sex), alpha = .5) + facet_grid(Pclass ~ .)
-ggplot(full, aes(Age)) + geom_histogram(aes(fill = Sex), position = "identity", alpha = .5) + facet_grid(Pclass ~ .)
-
-
-# Look at some summary statistics
-full %>% filter(!is.na(Age)) %>% 
-        group_by(Sex, Pclass) %>% 
-        summarize(median.age = median(Age),
-                  mean.age = mean(Age),
-                  sd.age = sd(Age),
-                  min.age = min(Age),
-                  max.age = max(Age),
-                  n = n())
-
-age.means <- full %>% filter(!is.na(Age)) %>% 
-        group_by(Sex, Pclass) %>% 
-        summarize(mean.age = mean(Age))
-
-# I'm going to impute the mean value of each Sex/Pclass into the missing Age values
-# in the full dataset.
-full <- full %>% left_join(age.means, by = c("Sex", "Pclass")) %>% 
+full <- full %>% left_join(age.means, by = c("Title", "Pclass")) %>% 
         mutate(Age = ifelse(is.na(Age), mean.age, Age)) %>% 
         select(-mean.age)
-        
-# Check that you did what you meant to do
-sum(is.na(full$Age))
+
+# Max Age for Masters is 14.5
+full %>% filter(Title == "Master.") %>% pull(Age) %>% summary
+
+# There are 51 girls Age 14.5 or younger
+full %>% filter(Sex == "female" & Age <= 14.5) %>% nrow
+
+# Change their Title to Girl.
+full <- full %>% mutate(Title = ifelse(Sex == "female" & Age <= 14.5, "Girl", Title))
+
+# Looks like it worked correctly
+full %>% filter(Title == "Girl") %>% nrow
+full %>% filter(Sex == "female" & Age <= 14.5) %>% pull(Title) %>% table
+
+# Although it doesn't look like it will play that big of a role
+women <- full %>% filter(Sex == "female")
+ggplot(women, aes(Survived)) + geom_bar(aes(fill = Survived)) + facet_grid(. ~ Title)
+
+
+# Just to reiterate that wherever there is a missing value in age.estimated,
+# that's because the age was missing initially. These missing values were
+# imputed later
+full %>% filter(is.na(age.estimated)) %>% pull(age.na) %>% unique
+#[1] "YES"
+full %>% filter(age.na == "YES") %>% pull(age.esstimated) %>% unique
+#[1] NA
+
+# Change missing values in age.estimaged to "imputed"
+full <- full %>% mutate(age.estimated = ifelse(is.na(age.estimated), "imputed", age.estimated))
+
+sum(is.na(full$age.estimated))
 #[1] 0
 
-ggplot(full, aes(Age)) + geom_density(aes(fill = Sex), alpha = .5) + facet_grid(Pclass ~ .)
-
-# Good, it looks like it worked properly.
-
-
-
-# Take another look at the Age survival rate plots
-age.survival <- age.explore()
-
-ggplot(age.survival, aes(max.age, survival.rate)) +
-        geom_line(aes(color = sex)) +
-        facet_grid(. ~ pclass)
 
 
 
 
 
-# How many passengers were under 15 years old?
-full %>% filter(Age <= 15) %>% 
-        group_by(Sex, Pclass) %>% 
-        summarize(n = n())
-
-# Proportions compared to the full dataset
-full %>% filter(Age <= 15) %>% 
-        group_by(Sex) %>% 
-        summarize(one = sum(Pclass == 1)/n(),
-                  two = sum(Pclass == 2)/n(),
-                  three = sum(Pclass == 3)/n())
-
-full %>% group_by(Sex) %>% 
-        summarize(one = sum(Pclass == 1)/n(),
-                  two = sum(Pclass == 2)/n(),
-                  three = sum(Pclass == 3)/n())
+### Fare variable ###
+#================================
 
 
-# "Master" looks like a title for young boys. I'll go back and change
-# the age of passengers with "Master" in their names.
-full %>% filter(Age <= 15 & Sex == "male") %>% select(Name, Age)
-full %>% filter(str_detect(Name, "Master\\.")) %>% select(Name, Age)
+# It looks like passengers that traveled together have the same ticket number.
+full %>% arrange(Name) %>% head(20)
+
+# There are 929 unique Tickets
+full %>% pull(Ticket) %>% unique %>% length
+#[1] 929
+
+# Make a new variable that contains the group size associated with each Ticket
+full <- full %>% group_by(Ticket) %>% 
+        mutate(group.size = n())
+
+summary(full$group.size)
+full %>% arrange(Name) %>% head(20)
+
+# Curious to see if the same could be calculated by summing SibSp and Parch
+all((full %>% mutate(size = SibSp + Parch + 1) %>% pull(size)) == full$group.size)
+
+# Interestingly, it's not. Let's check it out further
+full <- full %>% mutate(family.size = SibSp + Parch + 1)
+
+full %>% arrange(Ticket) %>% head(20)
+# So what happened is that some people travelled with friends but not family.
+
+# Is there anything interesting about the difference between group.size and
+# family.size?
+
+groups <- full %>% group_by(group.size) %>% 
+        summarize(survival.rate = mean(as.numeric(as.character(Survived)), na.rm = T))
+families <- full %>% group_by(family.size) %>% 
+        summarise(survival.rate = mean(as.numeric(as.character(Survived)), na.rm = T))
+
+data <- data.frame(size = groups$group.size, group = groups$survival.rate, family = families$survival.rate)
+
+# Eh, there are only small differences I think.
+ggplot(data) + geom_bar(aes(size, group), stat = "identity", alpha = .5) +
+        geom_bar(aes(size, family), stat = "identity", fill = 2, alpha = .5)
+
+
+
+
+
+
+
+
+
+
 
 
 
