@@ -199,7 +199,7 @@ sum(is.na(full$age.estimated))
 
 
 
-### Fare variable ###
+### Group variables ###
 #================================
 
 
@@ -212,7 +212,8 @@ full %>% pull(Ticket) %>% unique %>% length
 
 # Make a new variable that contains the group size associated with each Ticket
 full <- full %>% group_by(Ticket) %>% 
-        mutate(group.size = n())
+        mutate(group.size = n()) %>% 
+        ungroup
 
 summary(full$group.size)
 full %>% arrange(Name) %>% head(20)
@@ -220,35 +221,101 @@ full %>% arrange(Name) %>% head(20)
 # Curious to see if the same could be calculated by summing SibSp and Parch
 all((full %>% mutate(size = SibSp + Parch + 1) %>% pull(size)) == full$group.size)
 
-# Interestingly, it's not. Let's check it out further
+# Interestingly, it's not. Let's make another variable of family.size.
 full <- full %>% mutate(family.size = SibSp + Parch + 1)
 
 full %>% arrange(Ticket) %>% head(20)
 # So what happened is that some people travelled with friends but not family.
 
-# Is there anything interesting about the difference between group.size and
-# family.size?
-
-groups <- full %>% group_by(group.size) %>% 
-        summarize(survival.rate = mean(as.numeric(as.character(Survived)), na.rm = T))
-families <- full %>% group_by(family.size) %>% 
-        summarise(survival.rate = mean(as.numeric(as.character(Survived)), na.rm = T))
-
-data <- data.frame(size = groups$group.size, group = groups$survival.rate, family = families$survival.rate)
-
-# Eh, there are only small differences I think.
-ggplot(data) + geom_bar(aes(size, group), stat = "identity", alpha = .5) +
-        geom_bar(aes(size, family), stat = "identity", fill = 2, alpha = .5)
 
 
 
 
+### Fare variable ###
+#====================
+
+
+
+# Notice that the Fare values appear to be the sum of individual ticket Fares when
+# there are groups.
+
+# Also interesting is that some Fares equal 0.
+full %>% group_by(Pclass) %>% summarize(mean.total = mean(Fare, na.rm = T),
+                                        min.total = min(Fare, na.rm = T),
+                                        max.total = max(Fare, na.rm = T),
+                                        mean.ind = mean(Fare/group.size, na.rm = T),
+                                        min.ind = min(Fare/group.size, na.rm = T),
+                                        max.ind = max(Fare/group.size, na.rm = T))
+
+# Look at entries where Fare is 0
+full %>% filter(Fare == 0) %>% View
+
+# Weird. Not sure if these are mistakes or if these people somehow got on the
+# Titanic for free. Also keep in mind that there are only 17 total where Fare is 0.
+# They're also all males. The group.size and Cabin values are suspicious.
+# Also they all embarked from Southampton.
 
 
 
 
 
+### Cabin variable ###
+#=====================
 
+
+# There are a lot of empty values here. Of the ones that aren't
+# empty, it looks like the general form is that cabins start with
+# a letter followed by a number. Let's see exactly what we're dealing
+# with.
+full %>% filter(Cabin != "") %>% pull(Cabin) %>% str_extract("^.") %>% unique %>% sort
+
+# A through G and T. A through G almost certainly correspond to the decks on the
+# Titanic, which went from A to G. Not sure what the T is for.
+
+# Make a new Deck variable
+full <- full %>% mutate(Deck = ifelse(Cabin == "", "", str_extract(Cabin, "^.")))
+
+# How many recorded values are there exactly in Cabin anyway?
+full %>% filter(is.na(Cabin)) %>% nrow
+# No missing values
+full %>% filter(Cabin != "") %>% nrow
+#[1] 295
+
+# How are they distributed between the different decks?
+ggplot(full %>% filter(Deck != "") %>% group_by(Deck) %>% tally, aes(Deck, n)) + geom_bar(stat = "identity")
+ggplot(full %>% filter(Deck != "") %>% 
+        group_by(Deck) %>% 
+        summarize(survival.rate = mean(as.numeric(as.character(Survived)), na.rm = T),
+                  n = n()),
+       aes(Deck, survival.rate)) + geom_bar(stat = "identity")
+
+# Unfortunately, there doesn't seem to be anything obvious here. That would have been cool.
+
+# What decks do the different Pclasses appear on?
+full %>% filter(Deck != "") %>% 
+        group_by(Pclass, Deck) %>% tally
+
+# Interestingly, most of the people with a listed Cabin came from first class.
+# Also, only first class people were in Decks A, B, C, and T.
+
+# The different survival rates of first class people seems to be related
+# to the proportion of females on those decks.
+full %>% filter(Deck != "") %>% 
+        group_by(Pclass, Deck) %>% 
+        summarize(survival.rate = mean(as.numeric(as.character(Survived)), na.rm = T),
+                  female.prop = mean(Sex == "female"))
+
+
+# Are there any differences between people with Cabins listed vs.
+# people with no Cabin listed?
+full %>% group_by(Pclass, Sex, Deck) %>% 
+        summarize(survival.rate = mean(as.numeric(as.character(Survived)), na.rm = T)) %>% 
+        View
+
+# Is something going on in Deck C?
+full %>% filter(Deck == "C") %>% head(20)
+
+# Eh, I don't think so.
 
 
 
