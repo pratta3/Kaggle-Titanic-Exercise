@@ -1,6 +1,14 @@
 
 ### Kaggle Titanic Exercise ###
 
+
+
+# Overview of the model:
+
+# Ok. So after spending a lot of time exploring the dataset, here's what
+# I think:
+# - 
+
 setwd("C:/Users/Andrew/Desktop/Kaggle/Titanic")
 
 
@@ -255,6 +263,17 @@ full %>% filter(Fare == 0) %>% View
 # They're also all males. The group.size and Cabin values are suspicious.
 # Also they all embarked from Southampton.
 
+# Does survival rate increase as Fare increases?
+ggplot(full %>% filter(!is.na(Fare)) %>% 
+        filter(Fare != 0) %>% 
+        mutate(Fare = Fare/group.size,
+               Fare = cut(Fare, quantile(Fare, seq(0, 1, .1)))) %>% 
+        group_by(Fare, Sex) %>% 
+        summarize(survival.rate = mean(as.numeric(as.character(Survived)), na.rm = T)),
+       aes(Fare, survival.rate)) +
+        geom_bar(stat = "identity", aes(fill = Sex)) +
+        facet_grid(. ~ Sex)
+
 
 
 
@@ -316,6 +335,228 @@ full %>% group_by(Pclass, Sex, Deck) %>%
 full %>% filter(Deck == "C") %>% head(20)
 
 # Eh, I don't think so.
+
+
+
+
+### Ticket variable ###
+#======================
+
+
+
+full %>% pull(Ticket) %>% str_extract("^[A-Z]") %>% unique
+
+# Hm, this produced a missing value as one of the unique values...
+
+# But there are no missing values in the Ticket column
+sum(is.na(full$Ticket))
+
+# Got it. Tickets that don't begin with a letter produce
+# and NA result.
+full %>% pull(Ticket) %>% str_extract("^[A-Z]") %>% head
+
+# Take a look at the Ticket values that start with letters
+full %>% filter(str_detect(Ticket, "^[A-Z]")) %>% select(Ticket) %>% unique %>% arrange(Ticket) #%>% View
+
+full %>% filter(str_detect(Ticket, "^[A-Z]")) %>% 
+        group_by(Ticket) %>% 
+        summarize(group.size = n(),
+                  nsurvived = sum(as.numeric(as.character(Survived)), na.rm = T),
+                  survival.rate = mean(as.numeric(as.character(Survived)), na.rm = T),
+                  na.survived = sum(is.na(Survived))) %>% 
+        filter(na.survived == 0) %>% 
+        View
+
+# Try narrowing down the number of Tickets by including
+# more than just the first letter
+full %>% mutate(ticket.letters = str_extract(Ticket, "^.+/([A-Za-z]+|\\d+)|^[A-Za-z]+")) %>% 
+        filter(!is.na(ticket.letters)) %>%
+        group_by(ticket.letters) %>% 
+        summarize(n = n() - sum(is.na(Survived)),
+                  nsurvived = sum(as.numeric(as.character(Survived)), na.rm = T),
+                  nfemales = sum(Sex == "female" & !is.na(Survived)),
+                  survival.rate = nsurvived/n) %>% 
+        ungroup %>% 
+        summarize(avg.n = mean(n, na.rm = T),
+                  avg.survived = mean(nsurvived, na.rm = T),
+                  prop.survived = avg.survived/avg.n)
+
+# Interesting maybe?
+
+# What do the numbers look like?
+full %>% filter(str_detect(Ticket, "^\\d")) %>% 
+        # group_by(Ticket) %>% 
+        # summarize(n = n() - sum(is.na(Survived)),
+        #           nsurvived = sum(as.numeric(as.character(Survived)), na.rm = T),
+        #           nfemales = sum(Sex == "female" & !is.na(Survived)),
+        #           survival.rate = nsurvived/n) %>% 
+        mutate(ticket.length = str_length(Ticket)) %>%
+        group_by(ticket.length) %>% 
+        summarize(n = n() - sum(is.na(Survived)),
+                  nsurvived = sum(as.numeric(as.character(Survived)), na.rm = T),
+                  nfemales = sum(Sex == "female" & !is.na(Survived)),
+                  survival.rate = nsurvived/n,
+                  nclass1 = sum(Pclass == 1 & !is.na(Survived)),
+                  nclass2 = sum(Pclass == 2 & !is.na(Survived)),
+                  nclass3 = sum(Pclass == 3 & !is.na(Survived))) %>% 
+        arrange(ticket.length) %>% View
+        # ungroup %>% 
+        # summarize(avg.n = mean(n, na.rm = T),
+        #           avg.survived = mean(nsurvived, na.rm = T),
+        #           prop.survived = avg.survived/avg.n)
+
+
+
+full %>% filter(str_detect(Ticket, "^\\d")) %>% 
+        mutate(ticket.length = str_length(Ticket),
+               Survived = as.numeric(as.character(Survived))) %>% 
+        group_by(ticket.length) %>% 
+        summarize(n = n(),
+                  nsurvived = sum(Survived, na.rm = T),
+                  survival.rate = nsurvived/n,
+                  nclass1 = sum(Pclass == 1),
+                  nclass2 = sum(Pclass == 2),
+                  nclass3 = sum(Pclass == 3))
+
+
+tickets <- full %>% mutate(ticket.length = str_length(Ticket),
+               Survived = as.numeric(as.character(Survived))) %>% 
+        group_by(ticket.length) %>% 
+        summarize(n = n(),
+                  nsurvived = sum(Survived, na.rm = T),
+                  survival.rate = nsurvived/n,
+                  nclass1 = sum(Pclass == 1),
+                  nclass2 = sum(Pclass == 2),
+                  nclass3 = sum(Pclass == 3))
+# View(tickets)
+
+ggplot(tickets, aes(x = ticket.length)) + geom_bar(aes(y = n), stat = "identity", alpha = .5, fill = 2) + 
+        geom_bar(aes(y = nsurvived), stat = "identity", alpha = .5, fill = 4)
+
+full %>% filter(str_detect(Ticket, "^\\d")) %>% 
+        mutate(ticket.number = str_extract(Ticket, "^\\d")) %>% 
+        group_by(ticket.number) %>% 
+        tally
+
+full %>% filter(str_detect(Ticket, "^4")) %>% arrange(Ticket) %>% View
+
+full %>% group_by(group.size) %>% tally
+
+
+
+# This is potentially interesting. 1) What are the odds that the wife
+# of a husband that survived with a child that survived ALSO survived?
+# Probably pretty high. 2) (I forgot)
+full %>% filter(group.size >= 3) %>% arrange(group.size, Ticket) %>% View
+
+full <- full %>% mutate(last.name = str_extract(Name, "^[A-Za-z|']+"))
+# View(full)
+
+# Create variable last.name
+full %>% filter(group.size >= 2) %>% arrange(group.size, Ticket, last.name) %>% View
+
+# Create variables num.NA.survived, num.survived, and all.survived
+full <- full %>% group_by(Ticket) %>% 
+        mutate(num.NA.survived = sum(is.na(Survived)),
+               num.survived = sum(Survived == 1, na.rm = T),
+               all.survived = ifelse(num.survived == group.size, "YES", "NO"))
+
+# Ungroup dataset
+full <- full %>% ungroup
+
+# Examine groups where all members of the ticket group survived
+full %>% filter(all.survived == "YES") %>% arrange(group.size, Ticket) %>% View
+
+# Examine adults with no spouse but with children. Survival rate is
+# around 60%, but there are only 55 cases with known survival status.
+# However, the survival rate of males and females in this subset is
+# basically the same as in the overal train dataset. Womp.
+full %>% filter(SibSp == 0 & Parch > 0 & Title %in% c("Mr.", "Mrs.", "Miss.")) %>% 
+        filter(!is.na(Survived)) %>% 
+        group_by(Sex) %>% 
+        summarise(survival.rate = mean(Survived == 1),
+                  n = n())
+
+train %>% group_by(Sex) %>% summarize(survival.rate = mean(Survived == 1),
+                                      n = n())
+
+
+# OK but this doesn't exactly answer your question. You were interested
+# in knowing the odds that a man or woman survived given that their
+# children either survived or did not survive. The reason this is potentially
+# important is because the test and train datasets appear to have randomly
+# segmented the Titanic population, and in some cases there are unknown
+# survival values for people in the same ticket party as one, two, or more
+# people that all survived. What are the odds that this other unknown person
+# in the same ticket group also survived?
+
+# Create variable that tells whether or not all members in a ticket
+# group died
+full <- full %>% group_by(Ticket) %>% 
+        mutate(all.died = ifelse(num.NA.survived == 0 & num.survived == 0, "YES", "NO"))
+
+full %>% filter((all.survived == "YES" | all.died == "YES") & group.size > 1) %>% 
+        arrange(group.size, Ticket) %>% View
+
+# Do couples tend to live and die together? Do they tend to survive
+# at a higher rate than normal?
+
+# This isn't a perfect subset (it collects a few sibling pairs as well)
+# but is mostly accurate in extracting married couples.
+full %>% group_by(last.name) %>% 
+        mutate(is.couple = ifelse(n() == 2 & 
+                                          length(unique(Title)) == 2 &
+                                          !(Title %in% c("Girl", "Miss.", "Master.")) &
+                                          length(unique(Sex)) == 2 &
+                                          length(unique(Ticket)) == 1 &
+                                          SibSp != 0,
+                                  "couple", "")) %>% 
+        filter(is.couple == "couple") %>% 
+        arrange(desc(is.couple), last.name) %>% 
+        group_by(last.name) %>% 
+        mutate(contains.na = ifelse(sum(is.na(Survived)) > 0, TRUE, FALSE),
+               n = n()) %>% 
+        filter(!contains.na & !(n < 2)) %>% 
+        mutate(both.survived = ifelse(sum(Survived == 1) == 2, TRUE, FALSE),
+                  both.died = ifelse(sum(Survived == 1) == 0, TRUE, FALSE),
+                  one.survived = ifelse(sum(Survived == 1) == 1, TRUE, FALSE)) %>% 
+        ungroup %>% 
+        summarize(both.survived = sum(both.survived),
+                  both.died = sum(both.died),
+                  one.survived = sum(one.survived))
+
+# Alright then, looks like couples did not tend to live or die together.
+# Just out of curiosity, was it the man who generally died when only
+# one partner survived?
+full %>% group_by(last.name) %>% 
+        mutate(is.couple = ifelse(n() == 2 & 
+                                          length(unique(Title)) == 2 &
+                                          !(Title %in% c("Girl", "Miss.", "Master.")) &
+                                          length(unique(Sex)) == 2 &
+                                          length(unique(Ticket)) == 1 &
+                                          SibSp != 0,
+                                  "couple", "")) %>% 
+        filter(is.couple == "couple") %>% 
+        arrange(desc(is.couple), last.name) %>% 
+        group_by(last.name) %>% 
+        mutate(contains.na = ifelse(sum(is.na(Survived)) > 0, TRUE, FALSE),
+               n = n()) %>% 
+        filter(!contains.na & !(n < 2)) %>% 
+        mutate(one.survived = ifelse(sum(Survived == 1) == 1, TRUE, FALSE)) %>% 
+        filter(one.survived) %>% 
+        ungroup %>% 
+        mutate(n = n()) %>% 
+        filter(Sex == "male") %>% 
+        summarize(num.men.survived = sum(Survived == 1),
+                  n = unique(n))
+
+# Wow! Literally NONE of the men survived. In cases where only one person in
+# the pair survived, it was ALWAYS the woman.
+
+
+# OK. So what did I learn from all this? It looks like Ticket is probably
+# not going to be so useful after all.
+
 
 
 
